@@ -1,213 +1,162 @@
 # java-kanban
 
-Трекер задач в стиле «доски Kanban». Приложение умеет управлять тремя типами
-сущностей, хранить историю просмотров, сортировать задачи по времени, сохранять данные
-в CSV-файл и на отдельный key-value сервер по HTTP, а также отдавать данные через REST-подобный
-HTTP API.
+> 🇬🇧 English | [🇷🇺 Русский](README.ru.md)
 
-## Содержание
-- [Возможности](#возможности)
-- [Модель данных](#модель-данных)
-- [Архитектура](#архитектура)
-- [Требования](#требования)
-- [Сборка и запуск](#сборка-и-запуск)
-- [Консольное меню](#консольное-меню)
-- [HTTP API](#http-api)
-- [KV-сервер хранения](#kv-сервер-хранения)
-- [Формат CSV](#формат-csv)
-- [Тесты](#тесты)
-- [Что было исправлено при рефакторинге](#что-было-исправлено-при-рефакторинге)
-- [Известные ограничения](#известные-ограничения)
+A Kanban-style task tracker. Manages three types of entities, keeps a view history,
+sorts tasks by start time, persists data to a CSV file or an external KV server over HTTP,
+and exposes a REST-like HTTP API.
 
-## Возможности
-- Создание, изменение, удаление и поиск задач трёх типов.
-- Автоматический пересчёт статуса эпика по статусам его подзадач.
-- Расчёт длительности и времени начала/окончания эпика по подзадачам.
-- Проверка пересечения задач по времени при добавлении/изменении (валидация).
-- История последних просмотренных задач (без дубликатов, O(1) на операцию).
-- Список задач, отсортированный по времени начала (приоритизация).
-- Три варианта хранилища:
-  - `InMemoryTaskManager` — в оперативной памяти;
-  - `FileBackedTasksManager` — с автосохранением в CSV-файл;
-  - `HttpTaskManager` — с сохранением на внешний KV-сервер по HTTP.
+## Features
 
-## Модель данных
-| Тип | Класс | Описание |
-|-----|-------|----------|
-| Задача | `practicum.model.Task` | Базовая самостоятельная задача. |
-| Эпик | `practicum.model.Epic` | Комплексная задача, состоящая из подзадач. Длительность, время начала и окончания вычисляются по подзадачам. |
-| Подзадача | `practicum.model.Subtask` | Часть эпика, хранит `epicId`. |
+- Create, update, delete, and look up tasks of three types: Task, Epic, and Subtask.
+- Automatic Epic status recalculation based on its Subtasks' statuses.
+- Epic duration and start/end time derived from its Subtasks.
+- Overlap validation when adding or updating tasks.
+- Browsing history (no duplicates, O(1) per operation).
+- Tasks sorted by start time (prioritised view).
+- Three storage backends:
+  - `InMemoryTaskManager` — in-memory only;
+  - `FileBackedTasksManager` — auto-saves to a CSV file;
+  - `HttpTaskManager` — persists to an external KV server over HTTP.
 
-Статусы (`practicum.enums.Status`): `NEW`, `IN_PROGRESS`, `DONE`.
+## Tech Stack
 
-Две задачи считаются **равными, если у них одинаковый `id` и одинаковый класс**
-(`Task`/`Epic`/`Subtask`).
+| Layer | Technology |
+|---|---|
+| Language | Java 17 |
+| HTTP server | `com.sun.net.httpserver` (built-in) |
+| JSON | Gson 2.9.0 |
+| Tests | JUnit 5.8.1 |
+| Build | Manual `javac` / IntelliJ IDEA |
 
-## Архитектура
-```
-src/
-├── Main.java                        — консольная точка входа
-└── practicum/
-    ├── adapters/                    — Gson TypeAdapter'ы (сериализация в JSON)
-    │   ├── Adapter, TaskAdapter, SubtaskAdapter, EpicAdapter
-    ├── api/
-    │   ├── HttpTaskServer           — REST-подобный сервер задач (порт 8080)
-    │   ├── KVServer                 — key-value сервер хранения (порт 8078)
-    │   ├── KVTaskClient             — HTTP-клиент к KVServer
-    │   └── handlers/                — обработчики HTTP-эндпоинтов
-    ├── collections/
-    │   └── CustomLinkedList         — двусвязный список для истории
-    ├── enums/Status
-    ├── managers/
-    │   ├── TaskManager (интерфейс)  / InMemoryTaskManager
-    │   ├── FileBackedTasksManager   — расширяет InMemoryTaskManager
-    │   ├── HttpTaskManager          — расширяет FileBackedTasksManager
-    │   ├── HistoryManager (интерфейс) / InMemoryHistoryManager
-    │   └── Managers                 — фабрика менеджеров
-    ├── model/                       — Task, Epic, Subtask, Node
-    └── tests/                       — JUnit 5 тесты
-```
+## Requirements
 
-Иерархия менеджеров: `HttpTaskManager` → `FileBackedTasksManager` → `InMemoryTaskManager`.
-Каждый уровень добавляет персистентность поверх предыдущего.
+- **JDK 17+** (text blocks, switch expressions, `var`, try-with-resources are used).
+- `lib/gson-2.9.0.jar` — bundled in the repository.
+- `lib/junit-*.jar` — bundled in the repository (tests only).
 
-## Требования
-- **JDK 17+** (используются текстовые блоки, `switch`-выражения, `var`, try-with-resources).
-- Библиотека **Gson 2.9.0** (`lib/gson-2.9.0.jar`).
-- Для тестов — **JUnit 5.8.1** (jar-файлы в каталоге `lib/`).
+> ⚠️ A JRE 8 installation is **not enough** — a full JDK 17+ (with `javac`) is required.
+> The easiest path is to open the project in IntelliJ IDEA: the module config (`java-kanban.iml`)
+> and libraries are already set up.
 
-> ⚠️ Установленной в системе версии JRE 8 **недостаточно** — нужен полноценный JDK 17+
-> (с `javac`). Проще всего открыть проект в IntelliJ IDEA: конфигурация модуля
-> (`java-kanban.iml`) и библиотеки уже подключены.
+## Installation
 
-## Сборка и запуск
+### IntelliJ IDEA (recommended)
 
-### IntelliJ IDEA (рекомендуется)
-1. Открыть каталог проекта как проект IntelliJ IDEA.
-2. Указать SDK = JDK 17+ (File → Project Structure → Project SDK).
-3. Запустить класс `Main`.
+1. Open the project directory as an IntelliJ IDEA project.
+2. Set the SDK to JDK 17+ (**File → Project Structure → Project SDK**).
+3. Run the `Main` class.
 
-### Командная строка
+### Command line
+
 ```bash
-# из корня проекта
+# From the project root
 javac -encoding UTF-8 -cp "lib/gson-2.9.0.jar" -d out/production/java-kanban \
       $(find src -name "*.java" -not -path "*/tests/*")
 
-java -cp "out/production/java-kanban;lib/gson-2.9.0.jar" Main   # Windows
-java -cp "out/production/java-kanban:lib/gson-2.9.0.jar" Main   # Linux/macOS
-```
-При старте поднимаются `KVServer` (порт 8078) и `HttpTaskServer` (порт 8080),
-создаётся набор тестовых задач, после чего выводится консольное меню.
+# Windows
+java -cp "out/production/java-kanban;lib/gson-2.9.0.jar" Main
 
-## Консольное меню
+# Linux / macOS
+java -cp "out/production/java-kanban:lib/gson-2.9.0.jar" Main
 ```
-1.  Посмотреть все задачи
-2.  Добавить обычную задачу
-3.  Добавить комплексную задачу (Эпик)
-4.  Добавить подзадачу
-5.  Изменить статус
-6.  Удалить задачу
-7.  Посмотреть подзадачи
-8.  Изменить название и описание
-9.  Удалить все задачи
-10. Посмотреть историю
-11. Посмотреть все задачи, отсортированные по времени
-0.  Выход
+
+On startup, `KVServer` (port 8078) and `HttpTaskServer` (port 8080) are started,
+a set of sample tasks is created, and the interactive console menu is shown.
+
+## Running Tests
+
+Open the project in IntelliJ IDEA, right-click the `src/practicum/tests/` directory,
+and choose **Run tests**.
+
+> Tests that involve `HttpTaskManagerTest`, `HttpTaskServerTest`, and `KVServerTest`
+> start real network servers — ports **8078** and **8080** must be free before running them.
+
+## Project Structure
+
 ```
+src/
+├── Main.java                        — console entry point
+└── practicum/
+    ├── adapters/                    — Gson TypeAdapters (JSON serialisation)
+    │   └── Adapter, TaskAdapter, SubtaskAdapter, EpicAdapter
+    ├── api/
+    │   ├── HttpTaskServer           — REST-like task server (port 8080)
+    │   ├── KVServer                 — key-value storage server (port 8078)
+    │   ├── KVTaskClient             — HTTP client for KVServer
+    │   └── handlers/                — HTTP endpoint handlers
+    ├── collections/
+    │   └── CustomLinkedList         — doubly-linked list for history
+    ├── enums/Status
+    ├── managers/
+    │   ├── TaskManager (interface)  / InMemoryTaskManager
+    │   ├── FileBackedTasksManager   — extends InMemoryTaskManager
+    │   ├── HttpTaskManager          — extends FileBackedTasksManager
+    │   ├── HistoryManager (interface) / InMemoryHistoryManager
+    │   └── Managers                 — manager factory
+    ├── model/                       — Task, Epic, Subtask, Node
+    └── tests/                       — JUnit 5 test suite
+```
+
+Manager hierarchy: `HttpTaskManager` → `FileBackedTasksManager` → `InMemoryTaskManager`.
+Each level adds persistence on top of the previous one.
 
 ## HTTP API
-`HttpTaskServer` слушает `http://localhost:8080`. Тело запросов/ответов — JSON.
 
-| Метод | Путь | Действие |
-|-------|------|----------|
-| GET | `/tasks/task` | Список обычных задач |
-| GET | `/tasks/task?id={id}` | Задача по id |
-| POST | `/tasks/task?id={id}` | Создать (id=0/новый) или изменить (существующий id) задачу |
-| DELETE | `/tasks/task?id={id}` | Удалить задачу; без `id` — очистить все обычные задачи |
-| GET/POST/DELETE | `/tasks/subtask[?id=]` | То же для подзадач |
-| GET/POST/DELETE | `/tasks/epic[?id=]` | То же для эпиков |
-| GET | `/tasks/subtask/epic?id={epicId}` | Подзадачи указанного эпика |
-| GET | `/tasks/history` | История просмотров |
-| GET | `/tasks/` | Все задачи (отсортированные по времени) |
+`HttpTaskServer` listens on `http://localhost:8080`. Request and response bodies are JSON.
 
-Коды ответов: `200` — успех, `400` — некорректный запрос/метод,
-`404` — не найдено, `500` — внутренняя ошибка.
+| Method | Path | Action |
+|--------|------|--------|
+| GET | `/tasks/task` | List all tasks |
+| GET | `/tasks/task?id={id}` | Get task by id |
+| POST | `/tasks/task?id={id}` | Create (id=0/new) or update (existing id) a task |
+| DELETE | `/tasks/task?id={id}` | Delete task; omit `id` to clear all tasks |
+| GET/POST/DELETE | `/tasks/subtask[?id=]` | Same for subtasks |
+| GET/POST/DELETE | `/tasks/epic[?id=]` | Same for epics |
+| GET | `/tasks/subtask/epic?id={epicId}` | Subtasks of a given epic |
+| GET | `/tasks/history` | View history |
+| GET | `/tasks/` | All tasks sorted by start time |
 
-## KV-сервер хранения
-`KVServer` (`http://localhost:8078`) — простое key-value хранилище с авторизацией по
-токену (`API_TOKEN`):
+Response codes: `200` — OK, `400` — bad request / wrong method,
+`404` — not found, `500` — internal error.
 
-| Метод | Путь | Действие |
-|-------|------|----------|
-| GET | `/register` | Выдать `API_TOKEN` |
-| POST | `/save/{key}?API_TOKEN=...` | Сохранить значение |
-| GET | `/load/{key}?API_TOKEN=...` | Прочитать значение (`null`, если ключа нет) |
-| DELETE | `/clear/?API_TOKEN=...` | Очистить хранилище |
+## KV Storage Server
 
-`HttpTaskManager` сериализует каждую задачу в JSON и кладёт её по ключу-`id`, а в ключе
-`ids` хранит список `id_полноеИмяКласса` и историю просмотров (разделитель `|`).
+`KVServer` (`http://localhost:8078`) is a simple key-value store with token-based auth:
 
-## Формат CSV
-`FileBackedTasksManager` сохраняет данные в CSV. Порядок колонок:
+| Method | Path | Action |
+|--------|------|--------|
+| GET | `/register` | Issue an `API_TOKEN` |
+| POST | `/save/{key}?API_TOKEN=...` | Store a value |
+| GET | `/load/{key}?API_TOKEN=...` | Read a value (`null` if key absent) |
+| DELETE | `/clear/?API_TOKEN=...` | Clear the store |
+
+`HttpTaskManager` serialises each task to JSON and stores it under its `id` as key;
+the `ids` key holds the list of `id_fullyQualifiedClassName` entries and the view history
+(delimiter `|`).
+
+## CSV Format
+
+`FileBackedTasksManager` saves data in CSV with the following column order:
 
 ```
 id,type,name,status,description,duration,start_time,epic
 ```
 
-- `epic` — `id` эпика для подзадачи, `null` для остальных типов;
-- после блока задач идёт пустая строка, затем строка с `id` истории через запятую;
-- формат времени — `dd.MM.yyyy HH:mm:ss`.
+- `epic` — the epic's `id` for a subtask, `null` for all other types;
+- after the task block there is a blank line followed by a comma-separated list of history ids;
+- timestamp format: `dd.MM.yyyy HH:mm:ss`.
 
-Пример:
+Example:
+
 ```
 id,type,name,status,description,duration,start_time,epic
-1,Epic,Эпик 1,IN_PROGRESS,описание,0,29.03.2023 00:00:00,null
-2,Subtask,Подзадача 1,IN_PROGRESS,описание,30,29.03.2023 10:00:00,1
+1,Epic,Epic 1,IN_PROGRESS,description,0,29.03.2023 00:00:00,null
+2,Subtask,Subtask 1,IN_PROGRESS,description,30,29.03.2023 10:00:00,1
 
 2,1,
 ```
 
-## Тесты
-Тесты на **JUnit 5** находятся в `src/practicum/tests/`:
+## License
 
-| Тест | Покрывает |
-|------|-----------|
-| `model/TaskTest`, `model/SubtaskTest`, `model/EpicTest` | модель, равенство по id, расчёт времени/длительности, статусы |
-| `collections/CustomLinkedListTest` | двусвязный список (вставка, удаление из начала/середины/конца, единственный/`null`-узел) |
-| `managers/InMemoryTasksManagerTest` | менеджер в памяти (через общий `TaskManagerTest`) |
-| `managers/FileBackedTasksManagerTest` | сохранение/загрузка CSV |
-| `managers/HttpTaskManagerTest` | сохранение/загрузка через KV-сервер |
-| `managers/InMemoryHistoryManagerTest` | история просмотров |
-| `api/KVServerTest` | KV-хранилище: save/load/clear, поведение при отсутствующем ключе |
-| `api/HttpTaskServerTest` | HTTP API |
-
-Запуск из IntelliJ IDEA: ПКМ по каталогу `tests` → *Run tests*.
-Часть тестов (`HttpTaskManagerTest`, `HttpTaskServerTest`, `KVServerTest`) поднимает
-сетевые серверы — порты `8078`/`8080` должны быть свободны.
-
-## Что было исправлено при рефакторинге
-- **CSV-загрузка подзадач.** `epicId` читался из колонки `duration` (индекс 5) вместо
-  колонки `epic` (индекс 7), из-за чего подзадачи не восстанавливались из файла.
-  Заголовок CSV приведён в соответствие реальному порядку колонок.
-- **Десериализация JSON.** `Adapter` переиспользовал один общий экземпляр задачи для всех
-  вызовов `read()` — повторный/множественный `fromJson` возвращал один и тот же объект.
-  Теперь используется фабрика (`Supplier`), создающая свежий объект на каждый разбор;
-  костыль `recreateGson()` удалён.
-- **KV-клиент.** `KVTaskClient.clear()` отправлял GET (из-за пустого тела), сервер отвечал
-  `405` и очистка не выполнялась — теперь отправляется `DELETE`.
-- **KV-сервер.** Убрана повторная отправка заголовков ответа при отсутствии ключа
-  (приводила к исключению); `clear` восстанавливает ключ `ids`.
-- **Фабрика `Managers`.** Сетевой вызов больше не выполняется при загрузке класса —
-  только лениво, при первом обращении к `getDefault()`.
-- **Модель.** `equals`/`hashCode` реализованы по `id` и типу (вместо ссылочного сравнения);
-  убраны дублирующие переопределения в `Epic`/`Subtask`.
-- **`CustomLinkedList` / история.** Корректное удаление единственного узла и защита от `null`.
-- **`HttpTaskServer`.** Исправлены опечатки в логах, добавлен метод `stop()`; `Main`
-  корректно останавливает серверы при выходе.
-- Добавлены тесты для ранее непокрытых классов.
-
-## Известные ограничения
-- `Epic` вычисляет длительность/время через статическое поле `DEFAULT_MANAGER`;
-  приложение и тесты явно присваивают этому полю актуальный менеджер перед работой с эпиками.
-- `HttpTaskServer`/`KVServer` используют фиксированные порты (`8080`/`8078`).
-- Хранилище KV-сервера не персистентно: данные живут только пока запущен процесс.
+[MIT](LICENSE)
